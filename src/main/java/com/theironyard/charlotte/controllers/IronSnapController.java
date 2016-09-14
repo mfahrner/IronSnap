@@ -19,10 +19,14 @@ import javax.servlet.http.HttpSession;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 
 @RestController
 public class IronSnapController {
@@ -106,6 +110,7 @@ public class IronSnapController {
         p.setFilename(photoFile.getName());
         p.setPhotoSeconds(photoSeconds);
         p.setPublicPhoto(publicPhoto);
+
         photos.save(p);
 
         response.sendRedirect("/");
@@ -123,28 +128,32 @@ public class IronSnapController {
         User user = users.findFirstByName(username);
 
         for (int i = 0; i < photos.findByRecipient(user).size(); i ++) {
+            Photo p = photos.findByRecipient(user).get(i);
 
-            new java.util.Timer().schedule(
-                    new java.util.TimerTask() {
-                        @Override
-                        public void run() {
-                            photos.delete(photos.findByRecipient(user));
-                        }
-                    },
-                    10000);
+            int secondsTilDelete = photos.findOne(p.getId()).getPhotoSeconds();
+
+            String fileName = photos.findOne(p.getId()).getFilename();
+            File f = new File("/Users/mfahrner/code/IronSnap/public/" + fileName);
+
+            Timer timer = new Timer();
+
+            TimerTask task = new TimerTask() {
+                @Override
+                public void run() {
+                    photos.delete(p.getId());
+                    f.delete();
+                }
+            };
+
+            long delay = secondsTilDelete * 1000;
+
+            timer.schedule(task, delay);
+
         }
         return photos.findByRecipient(user);
     }
 
-//    just in case
-//        new java.util.Timer().schedule(
-//                new java.util.TimerTask() {
-//        @Override
-//        public void run() {
-//            photos.delete(photos.findByRecipient(user));
-//        }
-//    },
-//            10000);
+
 
     @RequestMapping(path = "/public-photos", method = RequestMethod.GET)
     public List<Photo> showPublicPhotos(HttpSession session) throws Exception {
@@ -153,13 +162,13 @@ public class IronSnapController {
             throw new Exception("Not logged in.");
         }
 
-        ArrayList<Photo> photosByPerson = new ArrayList<>();
+        List<Photo> photosByPerson = new ArrayList<>();
 
         User user = users.findFirstByName(username);
         for (int i = 0; i < photos.findBySender(user).size(); i ++) {
-            if (true == photos.findOne(i + 1).isPublicPhoto()) {
-                photosByPerson.add(photos.findOne(i + 1));
-
+            Photo p = photos.findBySender(user).get(i);
+            if (true == p.isPublicPhoto()) {
+                photosByPerson.add(p);
             }
         }
         return photosByPerson;
